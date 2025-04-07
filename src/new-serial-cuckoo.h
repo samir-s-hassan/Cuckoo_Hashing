@@ -11,9 +11,9 @@ private:
     // Entry wraps the actual value; used so we can store pointers and handle nulls
     struct Entry
     {
-        T val;                 // The actual data stored
-        Entry(T v) : val(v) {} // Constructor to initialize val
-    };
+        T value;                     // The actual data stored
+        Entry(T initValue) : value(initValue) {}  // Constructor to initialize 'value'
+        };
 
     int capacity;                            // Number of slots per table
     int maxDisplacements;                    // Max number of attempts before resize
@@ -47,7 +47,7 @@ private:
         return old;                          // Return old occupant (null if empty)
     }
 
-    // Resize the table (double the size) and re-insert all elements
+    // Resize the table (double the size) and re-add all elements
     void resize()
     {
         if (resizing)
@@ -66,14 +66,14 @@ private:
         salt1 = std::rand();
         salt2 = std::rand();
 
-        // Re-insert each entry from the old table into the new one
+        // Re-add each entry from the old table into the new one
         for (int i = 0; i < 2; ++i)
         {
             for (int j = 0; j < oldCap; ++j)
             {
                 if (oldTable[i][j])
                 {                                // If the slot isn't empty
-                    insert(oldTable[i][j]->val); // Re-insert value into new table
+                    add(oldTable[i][j]->value); // Re-add value into new table
                     delete oldTable[i][j];       // Free old memory
                 }
             }
@@ -101,44 +101,44 @@ public:
                 delete entry;      // Delete if not null
     }
 
-    // Insert a value using Cuckoo hashing
-    bool insert(const T &val)
+    // add a value using Cuckoo hashing
+    bool add(const T &value)
     {
-        if (contains(val))
+        if (contains(value))
             return false; // Avoid duplicates
 
-        Entry *temp = new Entry(val); // Wrap the value in a new entry
+        Entry *temp = new Entry(value); // Wrap the value in a new entry
 
         // Try to place the entry for up to maxDisplacements times
         for (int i = 0; i < maxDisplacements; ++i)
         {
-            int h1 = hash1(temp->val);                 // Get index in table 0
+            int h1 = hash1(temp->value);                 // Get index in table 0
             if ((temp = swap(0, h1, temp)) == nullptr) // Try placing in table 0
                 return true;                           // Success if no previous entry
 
-            int h2 = hash2(temp->val);                 // Get index in table 1
+            int h2 = hash2(temp->value);                 // Get index in table 1
             if ((temp = swap(1, h2, temp)) == nullptr) // Try placing in table 1
                 return true;                           // Success if no previous entry
         }
 
         delete temp;        // If we gave up, free memory
         resize();           // Resize the table
-        return insert(val); // Try again after resize
+        return add(value); // Try again after resize
     }
 
     // Remove a value if it exists
-    bool remove(const T &val)
+    bool remove(const T &value)
     {
-        int h1 = hash1(val); // Check table 0
-        if (table[0][h1] && table[0][h1]->val == val)
+        int h1 = hash1(value); // Check table 0
+        if (table[0][h1] && table[0][h1]->value == value)
         {
             delete table[0][h1];    // Free memory
             table[0][h1] = nullptr; // Mark as empty
             return true;
         }
 
-        int h2 = hash2(val); // Check table 1
-        if (table[1][h2] && table[1][h2]->val == val)
+        int h2 = hash2(value); // Check table 1
+        if (table[1][h2] && table[1][h2]->value == value)
         {
             delete table[1][h2];
             table[1][h2] = nullptr;
@@ -149,14 +149,14 @@ public:
     }
 
     // Check if the value is present
-    bool contains(const T &val) const
+    bool contains(const T &value) const
     {
-        int h1 = hash1(val); // Check table 0
-        if (table[0][h1] && table[0][h1]->val == val)
+        int h1 = hash1(value); // Check table 0
+        if (table[0][h1] && table[0][h1]->value == value)
             return true;
 
-        int h2 = hash2(val); // Check table 1
-        if (table[1][h2] && table[1][h2]->val == val)
+        int h2 = hash2(value); // Check table 1
+        if (table[1][h2] && table[1][h2]->value == value)
             return true;
 
         return false; // Not found
@@ -173,22 +173,21 @@ public:
         return count;
     }
 
-    // Insert a list of values into the table (non-thread-safe)
-    // New safer version: returns number of successful insertions
+    // add a list of values into the table (non-thread-safe)
+    // New safer version: returns number of successful addions
     int populate(const std::vector<T> &list)
     {
-        int inserted = 0;
-        for (const T &val : list)
+        int added = 0;
+        for (const T &value : list)
         {
-            if (insert(val))
+            if (add(value))
             {
-                inserted++;
+                added++;
             }
             else
             {
-                std::cerr << "Populate failed: Duplicate or collision at value = " << val << "\n";
             }
         }
-        return inserted;
+        return added;
     }
 };

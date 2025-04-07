@@ -5,14 +5,14 @@
 #include <algorithm>     // For std::find and std::swap
 #include <unordered_set> // For generating unique initial keys
 
-#include "new-serial-cuckoo.h" // Include your sequential cuckoo header
+#include "src/new-serial-cuckoo.h" // Include your sequential cuckoo header
 
 // Struct to track statistics from the benchmark
 struct Stats {
     int hits_contains = 0;
     int misses_contains = 0;
-    int successful_inserts = 0;
-    int failed_inserts = 0;
+    int successful_adds = 0;
+    int failed_adds = 0;
     int successful_removes = 0;
     int failed_removes = 0;
     long long time_ns = 0;
@@ -41,13 +41,13 @@ void run_serial_benchmark(CuckooSequentialSet<int>& set, std::vector<int>& liveK
             if (set.contains(value)) stats.hits_contains++;
             else stats.misses_contains++;
         } else if (choice < 0.9) {
-            // 10% insert
+            // 10% add
             value = value_gen(rng);
-            if (set.insert(value)) {
-                stats.successful_inserts++;
+            if (set.add(value)) {
+                stats.successful_adds++;
                 liveKeys.push_back(value); // Track key for possible remove
             } else {
-                stats.failed_inserts++;
+                stats.failed_adds++;
             }
         } else {
             // 10% remove
@@ -90,21 +90,21 @@ int main() {
     CuckooSequentialSet<int> cuckooSet;
     int initialSize = cuckooSet.populate(initialKeys);
 
-    std::cout << "Initial population complete. Inserted: " << initialSize << "\n";
+    std::cout << "Initial population complete. added: " << initialSize << "\n";
 
     // Run benchmark
     Stats stats;
     std::vector<int> liveKeys = initialKeys; // Used to track valid keys during benchmark
     run_serial_benchmark(cuckooSet, liveKeys, TOTAL_OPS, stats);
 
-    int expectedSize = initialSize + stats.successful_inserts - stats.successful_removes;
+    int expectedSize = initialSize + stats.successful_adds - stats.successful_removes;
     int actualSize = cuckooSet.size();
 
     // Output benchmark summary
     std::cout << "\n=== Cuckoo Sequential Set Benchmark ===\n";
     std::cout << "Operations performed: " << TOTAL_OPS << "\n";
     std::cout << "Contains → Hits: " << stats.hits_contains << ", Misses: " << stats.misses_contains << "\n";
-    std::cout << "Insert   → Successes: " << stats.successful_inserts << ", Failures: " << stats.failed_inserts << "\n";
+    std::cout << "Add      → Successes: " << stats.successful_adds << ", Failures: " << stats.failed_adds << "\n";
     std::cout << "Remove   → Successes: " << stats.successful_removes << ", Failures: " << stats.failed_removes << "\n";
     std::cout << "Expected final size: " << expectedSize << "\n";
     std::cout << "Actual final size:   " << actualSize << "\n";
