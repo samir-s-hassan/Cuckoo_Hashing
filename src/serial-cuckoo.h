@@ -11,9 +11,9 @@ private:
     // Entry wraps the actual value; used so we can store pointers and handle nulls
     struct Entry
     {
-        T value;                     // The actual data stored
-        Entry(T initValue) : value(initValue) {}  // Constructor to initialize 'value'
-        };
+        T value;                                 // The actual data stored
+        Entry(T initValue) : value(initValue) {} // Constructor to initialize 'value'
+    };
 
     int capacity;                            // Number of slots per table
     int maxDisplacements;                    // Max number of attempts before resize
@@ -72,9 +72,9 @@ private:
             for (int j = 0; j < oldCap; ++j)
             {
                 if (oldTable[i][j])
-                {                                // If the slot isn't empty
+                {                               // If the slot isn't empty
                     add(oldTable[i][j]->value); // Re-add value into new table
-                    delete oldTable[i][j];       // Free old memory
+                    delete oldTable[i][j];      // Free old memory
                 }
             }
         }
@@ -112,17 +112,17 @@ public:
         // Try to place the entry for up to maxDisplacements times
         for (int i = 0; i < maxDisplacements; ++i)
         {
-            int h1 = hash1(temp->value);                 // Get index in table 0
+            int h1 = hash1(temp->value);               // Get index in table 0
             if ((temp = swap(0, h1, temp)) == nullptr) // Try placing in table 0
                 return true;                           // Success if no previous entry
 
-            int h2 = hash2(temp->value);                 // Get index in table 1
+            int h2 = hash2(temp->value);               // Get index in table 1
             if ((temp = swap(1, h2, temp)) == nullptr) // Try placing in table 1
                 return true;                           // Success if no previous entry
         }
 
-        delete temp;        // If we gave up, free memory
-        resize();           // Resize the table
+        delete temp;       // If we gave up, free memory
+        resize();          // Resize the table
         return add(value); // Try again after resize
     }
 
