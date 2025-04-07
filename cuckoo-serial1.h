@@ -3,6 +3,8 @@
 #include <functional>
 #include <ctime>
 
+//FIRST SUBMISSION
+
 // Template class so it can store any type (like int, string, etc.)
 template <typename T>
 class CuckooSequentialSet {
