@@ -1,85 +1,115 @@
-#include <iostream>
-#include <vector>
-#include <random>
-#include <thread>
-#include <atomic>
-#include <chrono>
-#include "cuckoo-serial2.h"  // Make sure this matches your filename
+#include <iostream>      // For std::cout and std::cerr
+#include <vector>        // For std::vector
+#include <random>        // For random number generation
+#include <chrono>        // For measuring execution time
+#include <algorithm>     // For std::find and std::swap
+#include <unordered_set> // For generating unique initial keys
 
-// Parameters
-const int NUM_THREADS = 4;
-const int OPERATIONS_PER_THREAD = 10000;
-const int INITIAL_POPULATION = 1000;
+#include "new-serial-cuckoo.h" // Include your sequential cuckoo header
 
-// Global counters
-std::atomic<int> inserts_done(0);
-std::atomic<int> removes_done(0);
-std::atomic<int> contains_done(0);
+// Struct to track statistics from the benchmark
+struct Stats {
+    int hits_contains = 0;
+    int misses_contains = 0;
+    int successful_inserts = 0;
+    int failed_inserts = 0;
+    int successful_removes = 0;
+    int failed_removes = 0;
+    long long time_ns = 0;
+};
 
-// Thread worker function
-void runOperations(CuckooSequentialSet<int>& set, const std::vector<int>& keys, int thread_id) {
-    std::mt19937 rng(thread_id + std::random_device{}());  // Thread-local RNG
-    std::uniform_int_distribution<int> dist(0, keys.size() - 1);
-    std::uniform_real_distribution<double> op_dist(0.0, 1.0);
+// Run benchmark workload on the sequential cuckoo set
+void run_serial_benchmark(CuckooSequentialSet<int>& set, std::vector<int>& liveKeys, int totalOps, Stats& stats) {
+    std::mt19937 rng(std::random_device{}());
+    std::uniform_int_distribution<int> value_gen(1, 1000000); // For generating new keys
+    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For choosing operation type
 
-    for (int i = 0; i < OPERATIONS_PER_THREAD; ++i) {
-        int key = keys[dist(rng)];
-        double op_type = op_dist(rng);
+    auto start = std::chrono::high_resolution_clock::now(); // Start timer
 
-        if (op_type < 0.8) {
-            set.contains(key);
-            contains_done++;
-        } else if (op_type < 0.9) {
-            set.insert(key);
-            inserts_done++;
+    for (int i = 0; i < totalOps; ++i) {
+        double choice = op_dist(rng);
+        int value;
+
+        // Ensure removal/contains don't access empty liveKeys
+        if (liveKeys.empty()) choice = 1.0;
+
+        std::uniform_int_distribution<int> key_pick(0, liveKeys.size() - 1);
+
+        if (choice < 0.8) {
+            // 80% contains
+            value = liveKeys[key_pick(rng)];
+            if (set.contains(value)) stats.hits_contains++;
+            else stats.misses_contains++;
+        } else if (choice < 0.9) {
+            // 10% insert
+            value = value_gen(rng);
+            if (set.insert(value)) {
+                stats.successful_inserts++;
+                liveKeys.push_back(value); // Track key for possible remove
+            } else {
+                stats.failed_inserts++;
+            }
         } else {
-            set.remove(key);
-            removes_done++;
+            // 10% remove
+            value = liveKeys[key_pick(rng)];
+            if (set.remove(value)) {
+                stats.successful_removes++;
+                auto it = std::find(liveKeys.begin(), liveKeys.end(), value);
+                if (it != liveKeys.end()) {
+                    std::swap(*it, liveKeys.back());
+                    liveKeys.pop_back();
+                }
+            } else {
+                stats.failed_removes++;
+            }
         }
     }
+
+    auto end = std::chrono::high_resolution_clock::now(); // End timer
+    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
 }
 
 int main() {
-    // Initialize data structure
-    CuckooSequentialSet<int> set;
-    std::vector<int> keys;
+    const int NUM_INITIAL_KEYS = 1000;
+    const int TOTAL_OPS = 10000;
 
-    // Populate with initial values
+    std::vector<int> initialKeys;
+    std::unordered_set<int> keyCheck;
     std::mt19937 rng(std::random_device{}());
-    std::uniform_int_distribution<int> dist(1, 1000000);
+    std::uniform_int_distribution<int> val_gen(1, 1000000);
 
-    for (int i = 0; i < INITIAL_POPULATION; ++i) {
-        int key = dist(rng);
-        keys.push_back(key);
-        set.insert(key);
+    // Generate unique initial keys
+    while (initialKeys.size() < NUM_INITIAL_KEYS) {
+        int key = val_gen(rng);
+        if (keyCheck.insert(key).second) {
+            initialKeys.push_back(key);
+        }
     }
 
-    std::cout << "Initial population complete. Size: " << set.size() << std::endl;
+    // Initialize and populate the set
+    CuckooSequentialSet<int> cuckooSet;
+    int initialSize = cuckooSet.populate(initialKeys);
 
-    // Launch threads
-    std::vector<std::thread> threads;
-    auto start_time = std::chrono::high_resolution_clock::now();
+    std::cout << "Initial population complete. Inserted: " << initialSize << "\n";
 
-    for (int i = 0; i < NUM_THREADS; ++i) {
-        threads.emplace_back(runOperations, std::ref(set), std::cref(keys), i);
-    }
+    // Run benchmark
+    Stats stats;
+    std::vector<int> liveKeys = initialKeys; // Used to track valid keys during benchmark
+    run_serial_benchmark(cuckooSet, liveKeys, TOTAL_OPS, stats);
 
-    // Wait for all threads to finish
-    for (auto& t : threads) t.join();
+    int expectedSize = initialSize + stats.successful_inserts - stats.successful_removes;
+    int actualSize = cuckooSet.size();
 
-    auto end_time = std::chrono::high_resolution_clock::now();
-    auto duration = std::chrono::duration<double>(end_time - start_time).count();
-
-    // Final results
-    std::cout << "\n--- Benchmark Results ---" << std::endl;
-    std::cout << "Threads: " << NUM_THREADS << std::endl;
-    std::cout << "Operations per thread: " << OPERATIONS_PER_THREAD << std::endl;
-    std::cout << "Total operations: " << NUM_THREADS * OPERATIONS_PER_THREAD << std::endl;
-    std::cout << "Contains: " << contains_done.load() << std::endl;
-    std::cout << "Inserts: " << inserts_done.load() << std::endl;
-    std::cout << "Removes: " << removes_done.load() << std::endl;
-    std::cout << "Final set size: " << set.size() << std::endl;
-    std::cout << "Time taken: " << duration << " seconds" << std::endl;
+    // Output benchmark summary
+    std::cout << "\n=== Cuckoo Sequential Set Benchmark ===\n";
+    std::cout << "Operations performed: " << TOTAL_OPS << "\n";
+    std::cout << "Contains → Hits: " << stats.hits_contains << ", Misses: " << stats.misses_contains << "\n";
+    std::cout << "Insert   → Successes: " << stats.successful_inserts << ", Failures: " << stats.failed_inserts << "\n";
+    std::cout << "Remove   → Successes: " << stats.successful_removes << ", Failures: " << stats.failed_removes << "\n";
+    std::cout << "Expected final size: " << expectedSize << "\n";
+    std::cout << "Actual final size:   " << actualSize << "\n";
+    std::cout << "Size correctness: " << (expectedSize == actualSize ? "PASS ✅" : "FAIL ❌") << "\n";
+    std::cout << "Time taken: " << (stats.time_ns / 1000) << " microseconds (µs)\n";
 
     return 0;
 }
