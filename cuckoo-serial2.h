@@ -1,161 +1,163 @@
-#include <vector>       // For using std::vector
-#include <iostream>     // For printing errors or messages
+#include <vector>       // For std::vector (dynamic arrays)
+#include <iostream>     // For std::cout and std::cerr
 #include <functional>   // For std::hash
-#include <ctime>        // For seeding with current time
+#include <ctime>        // For std::time (used for hashing seeds)
 
-// Template class so it works with any data type (int, string, etc.)
+// Template class so it works with any type (int, string, etc.)
 template <typename T>
-class SequentialCuckooSet {
+class CuckooSequentialSet {
 private:
-    // Each Bucket holds a pointer to an entry (nullptr if empty)
-    struct Bucket {
-        T* entry = nullptr;  // Default is empty
+    // Entry wraps the actual value; used so we can store pointers and handle nulls
+    struct Entry {
+        T val;               // The actual data stored
+        Entry(T v) : val(v) {}  // Constructor to initialize val
     };
 
-    int capacity;                // Number of slots per table
-    int maxDisplacements;        // Max number of evictions before resizing
-    size_t salt1, salt2;         // Two salts to generate two different hash functions
-    std::vector<std::vector<Bucket>> table;  // Two hash tables (table[0] and table[1])
+    int capacity;                 // Number of slots per table
+    int maxDisplacements;         // Max number of attempts before resize
+    bool resizing = false;        // Flag to prevent recursive resize
+    size_t salt1, salt2;          // Two seeds for hash functions (to make them different)
+    std::vector<std::vector<Entry*>> table;  // Two hash tables (each a vector of pointers)
 
-    // Hash function using XOR between hashed key and salt
+    // Hash function that XORs std::hash with a salt and takes modulo capacity
     int hash(const T& key, size_t seed) const {
-        return (std::hash<T>{}(key) ^ seed) % capacity;  // Keeps result within bounds
+        return (std::hash<T>{}(key) ^ seed) % capacity;
     }
 
-    // First hash function
+    // First hash function using salt1
     int hash1(const T& key) const {
         return hash(key, salt1);
     }
 
-    // Second hash function
+    // Second hash function using salt2
     int hash2(const T& key) const {
         return hash(key, salt2);
     }
 
-    // Resize the table when insertion fails due to too many displacements
+    // Swap the new entry into the specified table slot, return the old entry (can be null)
+    Entry* swap(int tableIndex, int idx, Entry* entry) {
+        Entry* old = table[tableIndex][idx];  // Store the current occupant
+        table[tableIndex][idx] = entry;       // Replace with new entry
+        return old;                           // Return old occupant (null if empty)
+    }
+
+    // Resize the table (double the size) and re-insert all elements
     void resize() {
-        int oldCapacity = capacity;        // Store the old size
-        capacity *= 2;                     // Double the capacity
-        maxDisplacements *= 2;            // Allow more displacements
-        auto oldTable = table;            // Copy old table contents
+        if (resizing) return;                // Avoid recursive resizes
+        resizing = true;                     // Mark that we're resizing
 
-        // Create a new, empty table with double capacity
-        table = std::vector<std::vector<Bucket>>(2, std::vector<Bucket>(capacity));
+        int oldCap = capacity;               // Store old capacity
+        capacity *= 2;                       // Double the capacity
+        maxDisplacements *= 2;               // Increase displacement limit
+        auto oldTable = table;               // Save the old table
 
-        // Create new salts for new hash functions
-        salt1 = std::time(nullptr);
-        salt2 = salt1 ^ 0x9e3779b9;  // Just make sure salt2 is different from salt1
+        // Create a new empty table of size (2 x new capacity)
+        table = std::vector<std::vector<Entry*>>(2, std::vector<Entry*>(capacity, nullptr));
 
-        // Re-insert all elements into new table
+        // Generate new random salts for hashing
+        salt1 = std::rand();
+        salt2 = std::rand();
+
+        // Re-insert each entry from the old table into the new one
         for (int i = 0; i < 2; ++i) {
-            for (int j = 0; j < oldCapacity; ++j) {
-                if (oldTable[i][j].entry) {
-                    insert(*oldTable[i][j].entry);  // Reinsert the value
-                    delete oldTable[i][j].entry;    // Free the memory of the old entry
+            for (int j = 0; j < oldCap; ++j) {
+                if (oldTable[i][j]) {                  // If the slot isn't empty
+                    insert(oldTable[i][j]->val);       // Re-insert value into new table
+                    delete oldTable[i][j];             // Free old memory
                 }
             }
         }
+
+        resizing = false;  // Mark resize complete
     }
 
 public:
-    // Constructor: sets capacity, maxDisplacements, hash seeds, and initializes table
-    SequentialCuckooSet(int initialCapacity = 16)
+    // Constructor to initialize capacity, maxDisplacements, salts, and table
+    CuckooSequentialSet(int initialCapacity = 16)
         : capacity(initialCapacity),
           maxDisplacements(initialCapacity / 2),
-          salt1(std::time(nullptr)),
-          salt2(std::time(nullptr) ^ 0x9e3779b9) {
-        table = std::vector<std::vector<Bucket>>(2, std::vector<Bucket>(capacity));
+          salt1(std::time(nullptr)),                 // Use current time as salt1
+          salt2(std::time(nullptr) ^ 0x9e3779b9),    // Use XOR of time for salt2
+          table(2, std::vector<Entry*>(initialCapacity, nullptr)) {}  // Allocate two empty tables
+
+    // Destructor to clean up dynamically allocated memory
+    ~CuckooSequentialSet() {
+        for (auto& row : table)               // For each row (table 0 and 1)
+            for (auto entry : row)            // For each entry in the row
+                delete entry;                 // Delete if not null
     }
 
-    // Destructor: free all dynamically allocated entries
-    ~SequentialCuckooSet() {
-        for (auto& row : table) {
-            for (auto& bucket : row) {
-                delete bucket.entry;  // Safely delete each pointer if it's not nullptr
-            }
-        }
-    }
-
-    // Inserts a value into the table, using cuckoo hashing logic
+    // Insert a value using Cuckoo hashing
     bool insert(const T& val) {
-        if (contains(val)) return false;  // Do nothing if value is already present
+        if (contains(val)) return false;  // Avoid duplicates
 
-        T* displaced = new T(val);  // Create a pointer to the value to insert
+        Entry* temp = new Entry(val);     // Wrap the value in a new entry
 
-        // Try to insert by displacing existing items
+        // Try to place the entry for up to maxDisplacements times
         for (int i = 0; i < maxDisplacements; ++i) {
-            int h1 = hash1(*displaced);  // First hash
-            if (!table[0][h1].entry) {   // Empty slot in table[0]
-                table[0][h1].entry = displaced;
-                return true;
-            }
-            std::swap(displaced, table[0][h1].entry);  // Kick out existing and try again
+            int h1 = hash1(temp->val);                     // Get index in table 0
+            if ((temp = swap(0, h1, temp)) == nullptr)     // Try placing in table 0
+                return true;                               // Success if no previous entry
 
-            int h2 = hash2(*displaced);  // Second hash
-            if (!table[1][h2].entry) {   // Empty slot in table[1]
-                table[1][h2].entry = displaced;
-                return true;
-            }
-            std::swap(displaced, table[1][h2].entry);  // Kick again and loop
+            int h2 = hash2(temp->val);                     // Get index in table 1
+            if ((temp = swap(1, h2, temp)) == nullptr)     // Try placing in table 1
+                return true;                               // Success if no previous entry
         }
 
-        // If too many displacements, delete temp and resize the table
-        delete displaced;
-        resize();
-        return insert(val);  // Try inserting again after resize
+        delete temp;       // If we gave up, free memory
+        resize();          // Resize the table
+        return insert(val);  // Try again after resize
     }
 
-    // Removes a value if it's present
+    // Remove a value if it exists
     bool remove(const T& val) {
-        int h1 = hash1(val);  // Get index for table[0]
-        if (table[0][h1].entry && *table[0][h1].entry == val) {
-            delete table[0][h1].entry;    // Free memory
-            table[0][h1].entry = nullptr; // Mark as empty
+        int h1 = hash1(val);                                     // Check table 0
+        if (table[0][h1] && table[0][h1]->val == val) {
+            delete table[0][h1];                                 // Free memory
+            table[0][h1] = nullptr;                              // Mark as empty
             return true;
         }
 
-        int h2 = hash2(val);  // Get index for table[1]
-        if (table[1][h2].entry && *table[1][h2].entry == val) {
-            delete table[1][h2].entry;
-            table[1][h2].entry = nullptr;
+        int h2 = hash2(val);                                     // Check table 1
+        if (table[1][h2] && table[1][h2]->val == val) {
+            delete table[1][h2];
+            table[1][h2] = nullptr;
             return true;
         }
 
         return false;  // Not found in either table
     }
 
-    // Checks if a value exists in the set
+    // Check if the value is present
     bool contains(const T& val) const {
-        int h1 = hash1(val);  // First index
-        if (table[0][h1].entry && *table[0][h1].entry == val)
+        int h1 = hash1(val);                                     // Check table 0
+        if (table[0][h1] && table[0][h1]->val == val)
             return true;
 
-        int h2 = hash2(val);  // Second index
-        if (table[1][h2].entry && *table[1][h2].entry == val)
+        int h2 = hash2(val);                                     // Check table 1
+        if (table[1][h2] && table[1][h2]->val == val)
             return true;
 
-        return false;  // Not in table
+        return false;  // Not found
     }
 
-    // Counts how many values are in the set (not thread-safe)
+    // Count how many entries are stored in total (non-thread-safe)
     int size() const {
         int count = 0;
-        for (const auto& row : table) {
-            for (const auto& bucket : row) {
-                if (bucket.entry) ++count;
-            }
-        }
+        for (const auto& row : table)                  // For each table row
+            for (const auto& entry : row)              // For each slot
+                if (entry) ++count;                    // Count non-null entries
         return count;
     }
 
-    // Inserts a list of values all at once (non-thread-safe)
-    bool populate(const std::vector<T>& elements) {
-        for (const T& el : elements) {
-            if (!insert(el)) {
-                std::cerr << "Populate failed: Duplicate or insertion failure.\n";
-                return false;
+    // Insert a list of values into the table (non-thread-safe)
+    bool populate(const std::vector<T>& list) {
+        for (const T& val : list) {                    // For each value in the list
+            if (!insert(val)) {                        // Try to insert
+                std::cerr << "Failed to insert: " << val << "\n";  // Log error if duplicate/failure
+                return false;                          // Stop if any insert fails
             }
         }
-        return true;
+        return true;                                   // All inserted successfully
     }
 };
