@@ -84,7 +84,7 @@ private:
 
 public:
     // Constructor to initialize capacity, maxDisplacements, salts, and table
-    CuckooSequentialSet(int initialCapacity = 32)
+    CuckooSequentialSet(int initialCapacity)
         : capacity(initialCapacity),
           maxDisplacements(initialCapacity / 2),
           salt1(std::time(nullptr)),              // Use current time as salt1

@@ -150,11 +150,12 @@ public:
     {
         // First check if value already exists to avoid transaction overhead
         bool valueExists = false;
-        
-        __transaction_atomic {
+
+        __transaction_atomic
+        {
             valueExists = contains(value);
         }
-        
+
         if (valueExists)
             return false; // Avoid duplicates
 
@@ -164,9 +165,10 @@ public:
         bool success = false;
         Entry *leftover = nullptr;
 
-        __transaction_atomic {
+        __transaction_atomic
+        {
             Entry *temp = entry;
-            
+
             for (int i = 0; i < maxDisplacements && temp != nullptr; ++i)
             {
                 int h1 = hash1(temp->value);
@@ -185,7 +187,7 @@ public:
                     break;
                 }
             }
-            
+
             leftover = temp; // Save any displaced entry for cleanup outside transaction
         }
 
@@ -195,7 +197,7 @@ public:
             if (leftover != nullptr)
                 delete leftover;
             delete entry;
-            
+
             // Resize and try again
             resize();
             return add(valueCopy); // Recursive call with original value
@@ -209,8 +211,9 @@ public:
     {
         bool found = false;
         Entry *entryToDelete = nullptr;
-        
-        __transaction_atomic {
+
+        __transaction_atomic
+        {
             int h1 = hash1(value);
             if (table[0][h1] && table[0][h1]->value == value)
             {
@@ -229,13 +232,13 @@ public:
                 }
             }
         }
-        
+
         // Clean up memory outside transaction
         if (found && entryToDelete)
         {
             delete entryToDelete;
         }
-        
+
         return found;
     }
 
@@ -243,8 +246,9 @@ public:
     bool contains(const T &value) const
     {
         bool found = false;
-        
-        __transaction_atomic {
+
+        __transaction_atomic
+        {
             int h1 = hash1(value);
             if (table[0][h1] && table[0][h1]->value == value)
             {
@@ -259,7 +263,7 @@ public:
                 }
             }
         }
-        
+
         return found;
     }
 
