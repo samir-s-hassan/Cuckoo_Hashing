@@ -20,7 +20,7 @@ OUTPUT_FILE="main"
 rm -f "$OUTPUT_FILE"
 
 # Compile the program with optimization and warnings
-g++ -std=c++11 -O2 -pthread "$SRC_FILE" -o "$OUTPUT_FILE"
+g++ -std=c++17 -O2 -pthread "$SRC_FILE" -o "$OUTPUT_FILE"
 if [ $? -ne 0 ]; then
     echo "❌ Compilation failed!"
     exit 1
