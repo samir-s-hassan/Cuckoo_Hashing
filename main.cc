@@ -12,7 +12,7 @@
 #include "src/transactional-cuckoo.h" // Include your transactional cuckoo header
 
 // GLOBAL VARIABLES that affect performance
-const int numThreads = 4;                                   // Number of threads to be used for concurrent benchmarks
+const int numThreads = 16;                                   // Number of threads to be used for concurrent benchmarks
 const int NUM_INITIAL_KEYS = 100000;                        // Number of initial keys to insert into the set
 const int TOTAL_OPS = 1000000;                              // Total number of operations to perform during benchmarking
 std::uniform_int_distribution<int> value_gen(1, 100000);    // Random generator for values used in operations (contains, add, remove)

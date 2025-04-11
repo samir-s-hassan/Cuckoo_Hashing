@@ -7,6 +7,11 @@
 #include <atomic>     // Include the atomic library for thread-safe atomic operations
 #include <thread>     // Include the thread library for multi-threading operations
 
+// This class implements a thread-safe cuckoo hash set, where two hash tables
+// are used with probing. Each operation (add, remove, contains) is synchronized
+// using locks to ensure safety in a multi-threaded environment. The set handles
+// collisions and ensures there is no data corruption by using striped locking for concurrency.
+
 template <class T>
 class CuckooConcurrentSet
 {
