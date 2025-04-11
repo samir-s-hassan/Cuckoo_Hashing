@@ -1,5 +1,3 @@
-#!/bin/bash
-
 # Initialize the module system
 source /etc/profile.d/modules.sh
 
@@ -19,13 +17,15 @@ OUTPUT_FILE="main"
 
 rm -f "$OUTPUT_FILE"
 
-# Compile the program with optimization and warnings
-g++ -std=c++17 -O2 -pthread "$SRC_FILE" -o "$OUTPUT_FILE"
+# Compile the program with transactional memory enabled
+g++ -std=c++17 -O3 -pthread -fgnu-tm "$SRC_FILE" -o "$OUTPUT_FILE"
 if [ $? -ne 0 ]; then
     echo "❌ Compilation failed!"
     exit 1
 fi
 
+# Run the compiled program
 ./"$OUTPUT_FILE"
-rm -f "$OUTPUT_FILE"
 
+# Clean up the compiled output
+rm -f "$OUTPUT_FILE"
