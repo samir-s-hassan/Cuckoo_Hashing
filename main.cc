@@ -5,166 +5,150 @@
 #include <unordered_set> // For generating unique initial keys
 #include <thread>        // For creating threads
 #include <atomic>        // For atomic operations
-#include <iomanip>       // For std::setw
+#include <iomanip>       // For std::setw (for output formatting)
 
 #include "src/serial-cuckoo.h"        // Include your sequential cuckoo header
 #include "src/concurrent-cuckoo.h"    // Include your concurrent cuckoo header
 #include "src/transactional-cuckoo.h" // Include your transactional cuckoo header
 
 // GLOBAL VARIABLES that affect performance
-const int numThreads = 16;                                  // CHANGE
-const int NUM_INITIAL_KEYS = 100000;                        // default 100,000 <- CHANGE FOR SCALE
-const int TOTAL_OPS = 1000000;                              // default 1,000,000 <- CHANGE FOR SCALE
-std::uniform_int_distribution<int> value_gen(1, 100000);    // default 100,000 this affects the range of numbers we're doing operations for such as contains, add, remove
-std::uniform_int_distribution<int> val_gen_main(1, 100000); // default 100,000 this affects the range of numbers we're putting in our set
+const int numThreads = 4;                                   // Number of threads to be used for concurrent benchmarks
+const int NUM_INITIAL_KEYS = 100000;                        // Number of initial keys to insert into the set
+const int TOTAL_OPS = 1000000;                              // Total number of operations to perform during benchmarking
+std::uniform_int_distribution<int> value_gen(1, 100000);    // Random generator for values used in operations (contains, add, remove)
+std::uniform_int_distribution<int> val_gen_main(1, 100000); // Random generator for values used in populating the set
 
 // Struct to track statistics from the benchmark
 struct Stats
 {
-    std::atomic<int> hits_contains{0};
-    std::atomic<int> misses_contains{0};
-    std::atomic<int> successful_adds{0};
-    std::atomic<int> failed_adds{0};
-    std::atomic<int> successful_removes{0};
-    std::atomic<int> failed_removes{0};
-    long long time_ns = 0;
+    std::atomic<int> hits_contains{0};      // Number of successful "contains" operations
+    std::atomic<int> misses_contains{0};    // Number of unsuccessful "contains" operations
+    std::atomic<int> successful_adds{0};    // Number of successful "add" operations
+    std::atomic<int> failed_adds{0};        // Number of failed "add" operations
+    std::atomic<int> successful_removes{0}; // Number of successful "remove" operations
+    std::atomic<int> failed_removes{0};     // Number of failed "remove" operations
+    long long time_ns = 0;                  // Time taken for the benchmark in nanoseconds
 };
 
 // Run benchmark workload on the serial cuckoo set
 void run_serial_benchmark(CuckooSequentialSet<int> &set, int totalOps, Stats &stats)
 {
-    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For choosing operation type
-    std::mt19937 rng(std::random_device{}());
+    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For randomly selecting between contains, add, and remove
+    std::mt19937 rng(std::random_device{}());                 // Random number generator
 
-    auto start = std::chrono::high_resolution_clock::now(); // Start timer
+    auto start = std::chrono::high_resolution_clock::now(); // Start the timer to measure execution time
 
     for (int i = 0; i < totalOps; ++i)
     {
-        double choice = op_dist(rng);
-        int value = value_gen(rng); // Generate a new key for operations
+        double choice = op_dist(rng); // Randomly choose an operation (contains, add, or remove)
+        int value = value_gen(rng);   // Generate a random value to operate on
 
-        if (choice < 0.8)
+        if (choice < 0.8) // 80% chance for a "contains" operation
         {
-            // 80% contains
-            if (set.contains(value))
-                stats.hits_contains++;
+            if (set.contains(value))   // If the value is present in the set
+                stats.hits_contains++; // Increment the hits counter
             else
-                stats.misses_contains++;
+                stats.misses_contains++; // Increment the misses counter
         }
-        else if (choice < 0.9)
+        else if (choice < 0.9) // 10% chance for an "add" operation
         {
-            // 10% add
-            if (set.add(value))
-                stats.successful_adds++;
+            if (set.add(value))          // If the value is successfully added
+                stats.successful_adds++; // Increment the successful adds counter
             else
-                stats.failed_adds++;
+                stats.failed_adds++; // Increment the failed adds counter
         }
-        else
+        else // 10% chance for a "remove" operation
         {
-            // 10% remove
-            if (set.remove(value))
-                stats.successful_removes++;
+            if (set.remove(value))          // If the value is successfully removed
+                stats.successful_removes++; // Increment the successful removes counter
             else
-                stats.failed_removes++;
+                stats.failed_removes++; // Increment the failed removes counter
         }
     }
 
-    auto end = std::chrono::high_resolution_clock::now(); // End timer
-    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    auto end = std::chrono::high_resolution_clock::now();                                      // End the timer
+    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count(); // Calculate time taken in nanoseconds
 }
 
 // Run benchmark workload on the concurrent cuckoo set using threads
 void run_concurrent_benchmark(CuckooConcurrentSet<int> &set, int totalOps, Stats &stats)
 {
-    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For choosing operation type
+    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For randomly selecting between contains, add, and remove
 
-    auto start = std::chrono::high_resolution_clock::now(); // Start timer
+    auto start = std::chrono::high_resolution_clock::now(); // Start the timer to measure execution time
 
-    std::vector<std::thread> threads;
+    std::vector<std::thread> threads; // Vector to hold threads for parallel execution
 
-    // Create local RNG inside lambda and capture global variables by value
+    // Create threads and execute operations concurrently
     for (int t = 0; t < numThreads; ++t)
     {
         threads.push_back(std::thread([&set, totalOps, &stats, &op_dist]
                                       {
             std::mt19937 local_rng(std::random_device{}()); // Local RNG for each thread
             for (int i = 0; i < totalOps / numThreads; ++i) {
-                double choice = op_dist(local_rng); // Use local RNG here
-                int value = value_gen(local_rng);   // Use local RNG here
+                double choice = op_dist(local_rng); // Randomly choose an operation (contains, add, or remove)
+                int value = value_gen(local_rng);   // Generate a random value to operate on
 
-                if (choice < 0.8) {
-                    // 80% contains
+                if (choice < 0.8) { // 80% chance for a "contains" operation
                     if (set.contains(value)) stats.hits_contains++;
                     else stats.misses_contains++;
-                } else if (choice < 0.9) {
-                    // 10% add
+                } else if (choice < 0.9) { // 10% chance for an "add" operation
                     if (set.add(value)) stats.successful_adds++;
                     else stats.failed_adds++;
-                } else {
-                    // 10% remove
+                } else { // 10% chance for a "remove" operation
                     if (set.remove(value)) stats.successful_removes++;
                     else stats.failed_removes++;
                 }
             } }));
     }
 
+    // Wait for all threads to finish
     for (auto &th : threads)
         th.join();
 
-    auto end = std::chrono::high_resolution_clock::now();
-    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    auto end = std::chrono::high_resolution_clock::now();                                      // End the timer
+    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count(); // Calculate time taken in nanoseconds
 }
 
 // Run benchmark workload on the transactional cuckoo set using threads
 void run_transactional_benchmark(CuckooTransactionalSet<int> &set, int totalOps, Stats &stats)
 {
-    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For choosing operation type
+    std::uniform_real_distribution<double> op_dist(0.0, 1.0); // For randomly selecting between contains, add, and remove
 
-    auto start = std::chrono::high_resolution_clock::now(); // Start timer
+    auto start = std::chrono::high_resolution_clock::now(); // Start the timer to measure execution time
 
-    std::vector<std::thread> threads;
+    std::vector<std::thread> threads; // Vector to hold threads for parallel execution
 
-    // Create local RNG inside lambda and capture global variables by value
+    // Create threads and execute operations concurrently
     for (int t = 0; t < numThreads; ++t)
     {
         threads.push_back(std::thread([&set, totalOps, &stats, &op_dist]
                                       {
             std::mt19937 local_rng(std::random_device{}()); // Local RNG for each thread
             for (int i = 0; i < totalOps / numThreads; ++i) {
-                double choice = op_dist(local_rng); // Use local RNG here
-                int value = value_gen(local_rng);   // Use local RNG here
+                double choice = op_dist(local_rng); // Randomly choose an operation (contains, add, or remove)
+                int value = value_gen(local_rng);   // Generate a random value to operate on
 
-                if (choice < 0.8) {
-                    // 80% contains
+                if (choice < 0.8) { // 80% chance for a "contains" operation
                     if (set.contains(value)) stats.hits_contains++;
                     else stats.misses_contains++;
-                } else if (choice < 0.9) {
-                    // 10% add
+                } else if (choice < 0.9) { // 10% chance for an "add" operation
                     if (set.add(value)) stats.successful_adds++;
                     else stats.failed_adds++;
-                } else {
-                    // 10% remove
+                } else { // 10% chance for a "remove" operation
                     if (set.remove(value)) stats.successful_removes++;
                     else stats.failed_removes++;
                 }
             } }));
     }
 
+    // Wait for all threads to finish
     for (auto &th : threads)
         th.join();
 
-    auto end = std::chrono::high_resolution_clock::now();
-    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+    auto end = std::chrono::high_resolution_clock::now();                                      // End the timer
+    stats.time_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count(); // Calculate time taken in nanoseconds
 }
-
-#include <iostream>      // For std::cout and std::cerr
-#include <vector>        // For std::vector
-#include <random>        // For random number generation
-#include <chrono>        // For measuring execution time
-#include <unordered_set> // For generating unique initial keys
-#include <thread>        // For creating threads
-#include <atomic>        // For atomic operations
-#include <iomanip>       // For std::setw
 
 int main()
 {
@@ -221,7 +205,7 @@ int main()
     std::cout << std::setw(30) << std::left << "Expected final size:" << std::setw(10) << expectedSize_serial << "\n";
     std::cout << std::setw(30) << std::left << "Actual final size:" << std::setw(10) << actualSize_serial << "\n";
     std::cout << std::setw(30) << std::left << "Size correctness:" << (expectedSize_serial == actualSize_serial ? "PASS ✅" : "FAIL ❌") << "\n";
-    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_serial.time_ns / 1000) << " microseconds (µs)\n\n";
+    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_serial.time_ns / 1000000) << " milliseconds (ms)\n\n"; // milliseconds
 
     // Initialize and populate the concurrent set
     CuckooConcurrentSet<int> cuckooConcurrentSet(2 * NUM_INITIAL_KEYS);
@@ -262,7 +246,7 @@ int main()
     std::cout << std::setw(30) << std::left << "Expected final size:" << std::setw(10) << expectedSize_concurrent << "\n";
     std::cout << std::setw(30) << std::left << "Actual final size:" << std::setw(10) << actualSize_concurrent << "\n";
     std::cout << std::setw(30) << std::left << "Size correctness:" << (expectedSize_concurrent == actualSize_concurrent ? "PASS ✅" : "FAIL ❌") << "\n";
-    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_concurrent.time_ns / 1000) << " microseconds (µs)\n\n";
+    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_concurrent.time_ns / 1000000) << " milliseconds (ms)\n\n"; // milliseconds
 
     // Initialize and populate the transactional set
     CuckooTransactionalSet<int> cuckooTransactionalSet(2 * NUM_INITIAL_KEYS);
@@ -303,7 +287,7 @@ int main()
     std::cout << std::setw(30) << std::left << "Expected final size:" << std::setw(10) << expectedSize_transactional << "\n";
     std::cout << std::setw(30) << std::left << "Actual final size:" << std::setw(10) << actualSize_transactional << "\n";
     std::cout << std::setw(30) << std::left << "Size correctness:" << (expectedSize_transactional == actualSize_transactional ? "PASS ✅" : "FAIL ❌") << "\n";
-    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_transactional.time_ns / 1000) << " microseconds (µs)\n\n";
+    std::cout << std::setw(30) << std::left << "Time taken:" << std::setw(10) << (stats_transactional.time_ns / 1000000) << " milliseconds (ms)\n\n"; // milliseconds
 
     return 0;
 }
