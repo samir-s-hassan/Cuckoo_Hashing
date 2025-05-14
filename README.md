@@ -94,7 +94,9 @@ The chart illustrates how the application scales with increasing levels of concu
 This chart helps draw conclusions about parallel performance, thread efficiency, and bottlenecks introduced by synchronization mechanisms.
 
 ## Notes
+- My concurrent version isn't fully open-addressed because it uses linked lists (chaining) at each table position instead of finding new open positions in the array, which was a deliberate design choice to reduce contention in a multi-threaded environment. This hybrid approach allows for more efficient locking (only needing to lock the specific chains being modified) and avoids the complex synchronization that would be needed if multiple threads were displacing elements across the table simultaneously.
 - My transactional version is simply a wrapped version of my serial version. The transactional version wraps critical operations in __transaction_atomic blocks. These key operations (add, remove, contains) are executed atomically
+- instructions/ will have the instructions for this project that can add further context and/or be a helpful guide
 
 ## License
 Copyright 2025 Samir Hassan
