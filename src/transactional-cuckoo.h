@@ -5,7 +5,7 @@
 #include <atomic>     // For atomic variables to ensure consistent memory ordering
 
 /*This class implements a Cuckoo Hash Set with transactional support. The key operations like add, remove, and contains are wrapped in atomic transactions to ensure that these operations are atomic and consistent, even in a multi-threaded environment. The set uses two hash tables to store entries, with probing to handle collisions and displacement to move entries in case of conflicts. The set dynamically resizes when it becomes full and ensures thread safety using atomic operations. The class uses C++ transactional memory features to ensure that the add, remove, and contains operations are performed safely across multiple threads.
-*/
+ */
 
 template <typename T>
 class CuckooTransactionalSet

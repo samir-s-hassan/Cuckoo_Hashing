@@ -45,6 +45,8 @@ private:
     }
 
     // Relocate an element if a bucket overflows
+    // i is the current table
+    // hi is the index in the current table
     bool relocate(int i, int hi)
     {
         int hj = 0;                                 // Holds the index of the bucket in the other table
