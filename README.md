@@ -8,7 +8,6 @@ The project includes a benchmark suite (`main.cc`) that measures:
     - Success/failure rates for remove operations
 - Execution time in nanoseconds for different operations
 - Performance comparison between implementations
-- Concurrent operation behavior with multiple threads
 - Size consistency verification is necessary
 
 ## How to run
@@ -85,7 +84,7 @@ The program will output benchmark results for all three implementations (Sequent
 ## Charts
 View the chart:
 1. [On Google Sheets](https://docs.google.com/spreadsheets/d/19pdmQfLoDorniIDlVOsryQ8h0etsa2YlvdLRHreLdAk/edit?usp=sharing)  
-2. [Download File](./chart.xlsx)
+2. [Download File](./charts/chart.xlsx)
 
 The chart illustrates how the application scales with increasing levels of concurrency. The x-axis represents the number of threads used (1, 2, 4, 8, 16), while the y-axis shows the total execution time in milliseconds for completing a fixed number of operations. We also measure throughput (operations per ms).
 - Serial execution (1 thread) serves as the baseline for comparison.

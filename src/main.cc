@@ -7,9 +7,9 @@
 #include <atomic>        // For atomic operations
 #include <iomanip>       // For std::setw (for output formatting)
 
-#include "src/serial-cuckoo.h"        // Include your sequential cuckoo header
-#include "src/concurrent-cuckoo.h"    // Include your concurrent cuckoo header
-#include "src/transactional-cuckoo.h" // Include your transactional cuckoo header
+#include "header/serial-cuckoo.h"        // Include your sequential cuckoo header
+#include "header/concurrent-cuckoo.h"    // Include your concurrent cuckoo header
+#include "header/transactional-cuckoo.h" // Include your transactional cuckoo header
 
 // GLOBAL VARIABLES that affect performance
 const int numThreads = 4;                                   // Number of threads to be used for concurrent benchmarks

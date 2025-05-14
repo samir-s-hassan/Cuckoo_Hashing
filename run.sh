@@ -12,8 +12,8 @@ if [[ ! "$GCC_VERSION" =~ "11.2.0" ]]; then
 fi
 
 # Define source and output
-SRC_FILE="main.cc"
-OUTPUT_FILE="main"
+SRC_FILE="src/main.cc"
+OUTPUT_FILE="src/main"
 
 rm -f "$OUTPUT_FILE"
 
