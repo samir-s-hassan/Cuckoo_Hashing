@@ -10,6 +10,8 @@ The project includes a benchmark suite (`main.cc`) that measures:
 - Performance comparison between implementations
 - Size consistency verification is necessary
 
+This project is part of a course assignment and is not licensed for public use.
+
 ## How to run
 
 ### Prerequisites
